@@ -9,6 +9,22 @@ PREPARED_UNIT=""
 SERVICE_STOPPED=0
 UPDATE_COMPLETE=0
 
+wait_for_service() {
+    local attempt
+
+    for ((attempt = 1; attempt <= 15; attempt++)); do
+        if systemctl is-active --quiet "$SERVICE_NAME" && \
+            "$APP_DIR/.venv/bin/python" -c \
+                'import urllib.request; urllib.request.urlopen("http://127.0.0.1:99/api/health", timeout=2).read()' \
+                >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
 cleanup() {
     local exit_code=$?
     set +e
@@ -51,10 +67,11 @@ if [[ ! -x "$APP_DIR/.venv/bin/pip" || ! -f "$SERVICE_UNIT" ]]; then
     chmod +x "$SOURCE_DIR/install.sh"
     "$SOURCE_DIR/install.sh"
 
-    if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+    if ! wait_for_service; then
         echo "Installation finished, but ${SERVICE_NAME} is not active." >&2
         echo "Check that /mnt/Videos is mounted and writable by the service user." >&2
         systemctl status "$SERVICE_NAME" --no-pager --lines=20 >&2 || true
+        journalctl -u "$SERVICE_NAME" --no-pager --lines=40 >&2 || true
         exit 1
     fi
 
@@ -129,9 +146,10 @@ fi
 echo "Restarting ${SERVICE_NAME}..."
 systemctl restart "$SERVICE_NAME"
 
-if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-    echo "Service failed to start. Recent status:" >&2
+if ! wait_for_service; then
+    echo "Service failed its post-deployment health check. Recent status:" >&2
     systemctl status "$SERVICE_NAME" --no-pager --lines=20 >&2 || true
+    journalctl -u "$SERVICE_NAME" --no-pager --lines=40 >&2 || true
     exit 1
 fi
 

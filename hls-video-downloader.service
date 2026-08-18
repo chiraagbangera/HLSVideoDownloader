@@ -35,11 +35,10 @@ TimeoutStopSec=20
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
-# Basic hardening while leaving Chromium's normal sandbox available.
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/tmp/hls-video-downloader /mnt/Videos
+# Avoid systemd mount-namespace restrictions here. Some Raspberry Pi OS
+# configurations cannot create the required namespace and fail with
+# status=226/NAMESPACE before Gunicorn starts. Chromium still uses its own
+# sandbox unless CHROMIUM_NO_SANDBOX is explicitly enabled above.
 
 [Install]
 WantedBy=multi-user.target
