@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>Queue captured stream · {{ app_name }}</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0b0d10;
+            color: #f2f4f7;
+        }
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+        main { width: min(560px, calc(100% - 32px)); padding: 24px; background: #15181d; border: 1px solid #2a3039; border-radius: 14px; }
+        h1 { margin: 0; font-size: 24px; }
+        p { margin: 10px 0 0; color: #9aa4b2; line-height: 1.5; overflow-wrap: anywhere; }
+        .error { color: #f17b7b; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Queueing captured stream…</h1>
+    <p id="status">Sending the direct HLS URL to the downloader.</p>
+</main>
+<script>
+(async () => {
+    const status = document.getElementById("status");
+    const params = new URLSearchParams(location.hash.slice(1));
+    const payload = {
+        url: params.get("url") || "",
+        title: params.get("title") || "",
+        referer: params.get("referer") || "",
+        userAgent: params.get("userAgent") || ""
+    };
+
+    // Remove the signed URL from the visible address and browser history before
+    // contacting the API. URL fragments are never included in HTTP requests.
+    history.replaceState(null, "", location.pathname);
+
+    if (!payload.url) {
+        status.textContent = "No captured HLS URL was supplied. Run the browser capture script again.";
+        status.className = "error";
+        return;
+    }
+
+    try {
+        const response = await fetch("/download", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || `Downloader returned HTTP ${response.status}`);
+        }
+        const jobId = result.job?.id || "";
+        status.textContent = "Queued. Opening the downloader…";
+        location.replace(`/?queued=${encodeURIComponent(jobId)}`);
+    } catch (error) {
+        status.textContent = `Could not queue the stream: ${error.message || error}`;
+        status.className = "error";
+    }
+})();
+</script>
+</body>
+</html>

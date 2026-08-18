@@ -83,17 +83,20 @@ the browser developer console. The script:
 1. Reads completed resource requests from the browser performance timeline.
 2. Selects the latest matching `/etv/content/` `.m3u8` URL.
 3. Reads `data-content-title` from `#UIVideoPlayer` for the filename.
-4. Sends the URL, title, referer, and current browser user-agent to
-   `http://192.168.1.5:99/download`.
+4. Opens `http://192.168.1.5:99/capture` in a new tab with the URL, title,
+   referer, and current browser user-agent stored in the URL fragment.
+5. The Pi capture page removes that fragment, submits the payload to
+   `/download` on the same origin, and opens the queued job list.
 
-The server supports CORS preflight and private-network request headers on the
-submission endpoint. If the browser asks whether the website may access devices
-on the local network, allow it. Change `downloaderEndpoint` at the top of the
-script if the Pi address changes. Do not use `127.0.0.1` unless the downloader
-is running on the same computer as the browser.
+This top-level navigation bridge avoids Chrome blocking a direct `fetch()` from
+an HTTPS video page to the Pi's HTTP service. URL fragments are not transmitted
+in HTTP requests. If Chrome blocks the new tab, allow pop-ups for the video
+page and run the script again. Change `capturePage` at the top of the script if
+the Pi address changes. Do not use `127.0.0.1` unless the downloader is running
+on the same computer as the browser.
 
-The script logs the queued job response in the developer console. Open
-`http://192.168.1.5:99` to monitor progress.
+The capture tab redirects to `http://192.168.1.5:99` after queueing so you can
+monitor progress.
 
 ## Web interface
 

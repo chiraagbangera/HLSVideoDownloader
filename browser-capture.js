@@ -1,6 +1,6 @@
 (async () => {
     // 127.0.0.1 would point to this desktop, not the Raspberry Pi.
-    const downloaderEndpoint = "http://192.168.1.5:99/download";
+    const capturePage = "http://192.168.1.5:99/capture";
 
     const resources = performance
         .getEntriesByType("resource")
@@ -24,21 +24,23 @@
     console.log("Title:", title);
     console.log("HLS:", hlsUrl);
 
-    const response = await fetch(downloaderEndpoint, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            url: hlsUrl,
-            title,
-            referer: location.origin + "/",
-            userAgent: navigator.userAgent
-        })
-    });
+    // A secure webpage cannot reliably fetch an HTTP service on the LAN, even
+    // when local-network permission is granted. Open the Pi as a top-level page
+    // instead. The fragment remains in the browser and is not sent to the Pi;
+    // /capture reads it and performs a same-origin POST to /download.
+    const target = new URL(capturePage);
+    target.hash = new URLSearchParams({
+        url: hlsUrl,
+        title,
+        referer: location.origin + "/",
+        userAgent: navigator.userAgent
+    }).toString();
 
-    const result = await response.json();
-    if (!response.ok) {
-        console.error("Downloader rejected the request:", result);
+    const captureWindow = window.open(target.toString(), "_blank");
+    if (!captureWindow) {
+        console.error("The capture page was blocked. Allow pop-ups for this page and run the script again.");
         return;
     }
-    console.log("Queued download:", result);
+    captureWindow.opener = null;
+    console.log("Opened the downloader capture page.");
 })();

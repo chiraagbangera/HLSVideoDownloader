@@ -451,6 +451,11 @@ def index():
     )
 
 
+@app.get("/capture")
+def capture():
+    return render_template("capture.html", app_name=APP_NAME)
+
+
 @app.route("/download", methods=["POST", "OPTIONS"])
 @app.route("/api/download", methods=["POST", "OPTIONS"])
 def download():
