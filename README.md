@@ -1,4 +1,4 @@
-# LAN HLS Video Downloader
+# HLS Video Downloader
 
 A generic Raspberry Pi web service for downloading HLS video streams you are authorized to save.
 
@@ -11,11 +11,25 @@ For webpage URLs, the Pi opens the page in one shared headless Chromium process,
 
 The resolved stream is then downloaded with FFmpeg using stream copy (`-c copy`) to local temporary storage. Only after FFmpeg completes successfully is the MP4 moved to the NAS destination.
 
+## Educational use and legal disclaimer
+
+This project is provided strictly for educational, research, and personal
+experimentation purposes. It is not intended for piracy, copyright
+infringement, DRM circumvention, or downloading any media without the rights
+holder's permission. Only use it with content you own or are explicitly
+authorized to download.
+
+You are solely responsible for how you use this software and for complying with
+all applicable laws, licenses, website terms, and intellectual-property rights.
+The author does not endorse unauthorized copying and accepts no responsibility
+or liability for misuse of this project or any resulting claims, damages,
+penalties, or other consequences.
+
 ## Default layout
 
-- Web UI: `http://192.168.1.5:101`
+- Web UI: `http://192.168.1.5:99`
 - NAS destination: `/mnt/Videos`
-- Temporary job storage: `/var/tmp/lan-hls-video-downloader/jobs`
+- Temporary job storage: `/var/tmp/hls-video-downloader/jobs`
 - Concurrent jobs: `2`
 - Completed/failed job retention in UI: `24 hours`
 - Browser ad blocking: enabled
@@ -28,7 +42,7 @@ Browser / phone / PC
         |
         | paste normal page URL
         v
-Raspberry Pi :101
+Raspberry Pi :99
         |
         v
       Queue
@@ -58,7 +72,7 @@ The page URL is queued, not the temporary signed HLS URL. This means a job can w
 Copy/extract this folder to the Pi, then:
 
 ```bash
-cd lan-hls-video-downloader
+cd hls-video-downloader
 sudo ./install.sh
 ```
 
@@ -73,13 +87,13 @@ The installer installs:
 It installs the application to:
 
 ```text
-/opt/lan-hls-video-downloader
+/opt/hls-video-downloader
 ```
 
 and creates temporary directories under:
 
 ```text
-/var/tmp/lan-hls-video-downloader
+/var/tmp/hls-video-downloader
 ```
 
 ### NAS permission check
@@ -87,8 +101,8 @@ and creates temporary directories under:
 The service runs as user `pi` by default. Verify that user can write to the NAS:
 
 ```bash
-sudo -u pi touch /mnt/Videos/.lan-hls-test
-sudo rm /mnt/Videos/.lan-hls-test
+sudo -u pi touch /mnt/Videos/.hls-video-test
+sudo rm /mnt/Videos/.hls-video-test
 ```
 
 If your Pi account has a different username, install with:
@@ -100,16 +114,51 @@ sudo SERVICE_USER=myusername ./install.sh
 ## Service commands
 
 ```bash
-sudo systemctl status lan-hls-video-downloader
-sudo systemctl restart lan-hls-video-downloader
-sudo systemctl stop lan-hls-video-downloader
-journalctl -u lan-hls-video-downloader -f
+sudo systemctl status hls-video-downloader
+sudo systemctl restart hls-video-downloader
+sudo systemctl stop hls-video-downloader
+journalctl -u hls-video-downloader -f
+```
+
+## Deploy updates from VS Code
+
+Run the default build task in VS Code:
+
+```text
+Terminal -> Run Build Task -> Deploy to Raspberry Pi
+```
+
+The task prompts for the Raspberry Pi SSH destination and stages the current
+project with `rsync`. If the application is not installed yet, it runs the
+initial installer. Otherwise, it stops the service, applies changed
+application, dependency, and systemd unit files, and restarts the service. If
+an update step fails after the stop, the updater attempts to start the service
+again.
+
+Deploying over the former `lan-hls-video-downloader` installation performs a
+one-time migration. The old service is stopped, the renamed service is
+installed, and the old `/opt` and `/var/tmp` application directories are
+removed only after `hls-video-downloader` starts successfully. Completed videos
+under `/mnt/Videos` are not touched.
+
+The same deployment can be run from a terminal:
+
+```bash
+PI_HOST=pi@raspberrypi.local ./deploy.sh
+```
+
+Use `REMOTE_DIR` to override the temporary remote staging directory if needed:
+
+```bash
+PI_HOST=pi@raspberrypi.local \
+REMOTE_DIR=/tmp/hls-video-deploy \
+./deploy.sh
 ```
 
 Health endpoint:
 
 ```text
-http://192.168.1.5:101/api/health
+http://192.168.1.5:99/api/health
 ```
 
 ## Web interface
@@ -117,7 +166,7 @@ http://192.168.1.5:101/api/health
 Open:
 
 ```text
-http://192.168.1.5:101
+http://192.168.1.5:99
 ```
 
 Paste a page such as:
@@ -159,9 +208,9 @@ Environment=MAX_CONCURRENT_DOWNLOADS=2
 Additional jobs remain queued. To change it:
 
 ```bash
-sudo nano /etc/systemd/system/lan-hls-video-downloader.service
+sudo nano /etc/systemd/system/hls-video-downloader.service
 sudo systemctl daemon-reload
-sudo systemctl restart lan-hls-video-downloader
+sudo systemctl restart hls-video-downloader
 ```
 
 Two workers may extract concurrently, but they share a single Chromium browser process. Each extraction uses its own isolated browser context/page. Once a worker has resolved its HLS manifest, that browser context is closed and FFmpeg handles the actual download.
@@ -192,7 +241,7 @@ Environment=ADBLOCK_DOMAINS=ads.example.com,tracker.example.net
 The installer downloads Playwright's Chromium build into:
 
 ```text
-/var/tmp/lan-hls-video-downloader/browsers
+/var/tmp/hls-video-downloader/browsers
 ```
 
 and the systemd unit sets `PLAYWRIGHT_BROWSERS_PATH` to that directory. This avoids depending on whatever Chromium version happens to be installed by the Raspberry Pi OS package manager.
@@ -264,3 +313,11 @@ Short-lived stream URLs, cookies, and authorization headers captured by Chromium
 - This service intentionally accepts arbitrary HTTP/HTTPS URLs, so expose it only to a trusted LAN.
 - Not every website uses HLS. DASH-only (`.mpd`) or DRM-protected playback is outside this downloader's scope.
 - Use only with media you are authorized to download.
+
+## License
+
+This project is available under the [MIT License](LICENSE). You may use, copy,
+modify, and distribute it, provided that the copyright and license notice are
+retained in copies or substantial portions of the software. Retaining that
+notice provides the required attribution. The software is supplied **as is**,
+without warranty; see the license for the complete terms.

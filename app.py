@@ -22,7 +22,7 @@ APP_NAME = "HLS Video Downloader"
 
 DOWNLOAD_DIR = Path(os.environ.get("DOWNLOAD_DIR", "/mnt/Videos")).resolve()
 TEMP_DOWNLOAD_DIR = Path(
-    os.environ.get("TEMP_DOWNLOAD_DIR", "/var/tmp/lan-hls-video-downloader")
+    os.environ.get("TEMP_DOWNLOAD_DIR", "/var/tmp/hls-video-downloader")
 ).resolve()
 
 FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "/usr/bin/ffmpeg")
@@ -1235,4 +1235,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=101, threaded=True)
+    app.run(host="0.0.0.0", port=99, threaded=True)

@@ -1,5 +1,5 @@
 [Unit]
-Description=LAN HLS Video Downloader
+Description=HLS Video Downloader
 After=network-online.target remote-fs.target
 Wants=network-online.target
 RequiresMountsFor=/mnt/Videos
@@ -8,14 +8,14 @@ RequiresMountsFor=/mnt/Videos
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/opt/lan-hls-video-downloader
+WorkingDirectory=/opt/hls-video-downloader
 
 Environment=PYTHONUNBUFFERED=1
-Environment=HOME=/var/tmp/lan-hls-video-downloader/home
-Environment=TMPDIR=/var/tmp/lan-hls-video-downloader/tmp
-Environment=PLAYWRIGHT_BROWSERS_PATH=/var/tmp/lan-hls-video-downloader/browsers
+Environment=HOME=/var/tmp/hls-video-downloader/home
+Environment=TMPDIR=/var/tmp/hls-video-downloader/tmp
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/tmp/hls-video-downloader/browsers
 Environment=DOWNLOAD_DIR=/mnt/Videos
-Environment=TEMP_DOWNLOAD_DIR=/var/tmp/lan-hls-video-downloader/jobs
+Environment=TEMP_DOWNLOAD_DIR=/var/tmp/hls-video-downloader/jobs
 Environment=FFMPEG_BIN=/usr/bin/ffmpeg
 Environment=FFPROBE_BIN=/usr/bin/ffprobe
 Environment=MAX_CONCURRENT_DOWNLOADS=2
@@ -26,12 +26,12 @@ Environment=ADBLOCK_ENABLED=1
 Environment=ADBLOCK_FALLBACK=1
 Environment=CHROMIUM_NO_SANDBOX=0
 
-ExecStart=/opt/lan-hls-video-downloader/.venv/bin/gunicorn --workers 1 --threads 8 --bind 0.0.0.0:101 --access-logfile - --error-logfile - app:app
+ExecStart=/opt/hls-video-downloader/.venv/bin/gunicorn --workers 1 --threads 8 --bind 0.0.0.0:99 --access-logfile - --error-logfile - app:app
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=20
 
-# Port 101 is privileged on Linux.
+# Port 99 is privileged on Linux.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
@@ -39,7 +39,7 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/tmp/lan-hls-video-downloader /mnt/Videos
+ReadWritePaths=/var/tmp/hls-video-downloader /mnt/Videos
 
 [Install]
 WantedBy=multi-user.target
