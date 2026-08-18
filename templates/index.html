@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>{{ app_name }}</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --bg: #0b0d10;
+            --panel: #15181d;
+            --panel2: #101318;
+            --border: #2a3039;
+            --text: #f2f4f7;
+            --muted: #9aa4b2;
+            --accent: #78a9ff;
+            --ok: #63d392;
+            --warn: #f2c46d;
+            --bad: #f17b7b;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); }
+        main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+        h1 { margin: 0; font-size: clamp(28px, 5vw, 42px); letter-spacing: -0.035em; }
+        h2 { margin: 0; font-size: 18px; }
+        p { line-height: 1.5; }
+        code { overflow-wrap: anywhere; }
+        a { color: var(--accent); }
+        .lead { color: var(--muted); margin: 8px 0 0; max-width: 780px; }
+        .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
+        .metric, .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+        .metric { padding: 14px; min-height: 84px; }
+        .metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+        .metric .value { margin-top: 6px; font-weight: 700; overflow-wrap: anywhere; }
+        .card { padding: 18px; margin-top: 14px; }
+        form { display: grid; grid-template-columns: minmax(0, 1fr) 260px auto; gap: 9px; margin-top: 14px; }
+        input, button { font: inherit; border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+        input { background: var(--panel2); color: var(--text); min-width: 0; }
+        button { background: var(--text); color: #111; font-weight: 750; cursor: pointer; }
+        button:hover { opacity: .92; }
+        .hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+        .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .section-title { display: flex; align-items: center; gap: 9px; }
+        .count { min-width: 24px; height: 24px; padding: 0 7px; display: inline-grid; place-items: center; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 12px; }
+        .jobs { display: grid; gap: 10px; margin-top: 12px; }
+        .job { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+        .job-title { font-weight: 750; overflow-wrap: anywhere; }
+        .source { color: var(--muted); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+        .status { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px; }
+        .status.completed { color: var(--ok); }
+        .status.failed { color: var(--bad); }
+        .status.extracting, .status.downloading, .status.moving { color: var(--accent); }
+        .status.queued { color: var(--warn); }
+        .progress { height: 9px; background: #292e36; border-radius: 999px; overflow: hidden; margin: 12px 0 7px; }
+        .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .35s ease; }
+        .meta { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+        .message { margin-top: 7px; font-size: 13px; }
+        details { margin-top: 9px; }
+        summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+        pre { white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow: auto; background: #090b0e; border: 1px solid #20252c; padding: 10px; border-radius: 8px; font-size: 12px; }
+        .empty { color: var(--muted); padding: 14px 2px; }
+        .notice { display: none; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; }
+        .notice.show { display: block; }
+        .notice.error { color: var(--bad); }
+        .notice.ok { color: var(--ok); }
+        .health { font-size: 12px; color: var(--muted); }
+        .health.good { color: var(--ok); }
+        .health.bad { color: var(--bad); }
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            form { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 520px) {
+            main { padding: 20px 14px 50px; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <div class="row">
+            <div>
+                <h1>{{ app_name }}</h1>
+                <p class="lead">Paste a normal video webpage URL or a direct HLS <code>.m3u8</code> URL. The Pi resolves the active HLS stream in headless Chromium, downloads it locally with FFmpeg without re-encoding, then moves the completed MP4 to the NAS.</p>
+            </div>
+            <div id="health" class="health">Checking service…</div>
+        </div>
+    </header>
+
+    <div class="grid">
+        <div class="metric">
+            <div class="label">NAS destination</div>
+            <div class="value"><code>{{ download_dir }}</code></div>
+        </div>
+        <div class="metric">
+            <div class="label">Temporary storage</div>
+            <div class="value"><code>{{ temp_download_dir }}</code></div>
+        </div>
+        <div class="metric">
+            <div class="label">Concurrency</div>
+            <div class="value">{{ max_concurrent_downloads }} workers</div>
+        </div>
+        <div class="metric">
+            <div class="label">Browser extraction</div>
+            <div class="value">Ad block {{ "on" if adblock_enabled else "off" }}{% if adblock_enabled and adblock_fallback %} + fallback{% endif %}</div>
+        </div>
+    </div>
+
+    <section class="card">
+        <h2>Add download</h2>
+        <form method="post" action="/download">
+            <input name="url" type="url" placeholder="https://example.com/watch/video or https://cdn.example.com/master.m3u8" autocomplete="off" required>
+            <input name="title" placeholder="Optional output filename/title">
+            <button type="submit">Add to queue</button>
+        </form>
+        <div class="hint">Page URLs are resolved only when a worker starts, so short-lived signed HLS links are not sitting in the queue waiting to expire. Finished and failed job records are cleared after {{ ttl_hours }} hours.</div>
+        <div id="notice" class="notice"></div>
+    </section>
+
+    <section class="card">
+        <div class="row">
+            <div class="section-title"><h2>Active</h2><span id="activeCount" class="count">0</span></div>
+            <span id="summary" class="hint" style="margin:0">Loading…</span>
+        </div>
+        <div id="activeJobs" class="jobs"></div>
+    </section>
+
+    <section class="card">
+        <div class="section-title"><h2>Queued</h2><span id="queuedCount" class="count">0</span></div>
+        <div id="queuedJobs" class="jobs"></div>
+    </section>
+
+    <section class="card">
+        <div class="section-title"><h2>Recent</h2><span id="recentCount" class="count">0</span></div>
+        <div id="recentJobs" class="jobs"></div>
+    </section>
+
+    <p class="hint">Use only with streams you are authorized to save. The service is intended for a trusted LAN and accepts arbitrary HTTP/HTTPS URLs.</p>
+</main>
+
+<script>
+function fmtBytes(bytes) {
+    if (bytes == null) return "";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = Number(bytes);
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+    return `${value.toFixed(i >= 2 ? 2 : 1)} ${units[i]}`;
+}
+
+function fmtSeconds(value) {
+    if (value == null) return "";
+    const s = Math.max(0, Math.floor(Number(value)));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return h ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${m}:${String(sec).padStart(2,"0")}`;
+}
+
+function esc(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+}
+
+function jobHtml(job) {
+    const percent = Number(job.progress || 0);
+    const timing = job.duration_seconds
+        ? `${fmtSeconds(job.downloaded_seconds)} / ${fmtSeconds(job.duration_seconds)}`
+        : fmtSeconds(job.downloaded_seconds);
+    const size = job.output_bytes ? fmtBytes(job.output_bytes) : fmtBytes(job.downloaded_bytes);
+    const queueText = job.queue_position ? `Queue #${job.queue_position}` : "";
+    const log = (job.log || []).slice(-100).join("\n");
+    const hasProgress = ["downloading", "moving", "completed"].includes(job.status);
+
+    return `
+        <article class="job" data-job-id="${esc(job.id)}">
+            <div class="row">
+                <div style="min-width:0; flex:1">
+                    <div class="job-title">${esc(job.filename || job.title || "video")}</div>
+                    <div class="source"><a href="${esc(job.source_url)}" target="_blank" rel="noreferrer">${esc(job.source_url)}</a></div>
+                </div>
+                <div class="status ${esc(job.status)}">${esc(job.status)}</div>
+            </div>
+            ${hasProgress ? `<div class="progress"><div style="width:${Math.min(100, Math.max(0, percent))}%"></div></div>` : ""}
+            <div class="meta">
+                ${hasProgress ? `<span>${percent.toFixed(1)}%</span>` : ""}
+                ${timing ? `<span>${esc(timing)}</span>` : ""}
+                ${size ? `<span>${esc(size)}</span>` : ""}
+                ${job.speed ? `<span>${esc(job.speed)}</span>` : ""}
+                ${queueText ? `<span>${esc(queueText)}</span>` : ""}
+                ${job.worker_number ? `<span>Worker ${job.worker_number}</span>` : ""}
+                ${job.adblock_used === true ? `<span>Ad block used</span>` : ""}
+                ${job.direct_hls ? `<span>Direct HLS</span>` : ""}
+            </div>
+            ${job.message ? `<div class="message">${esc(job.message)}</div>` : ""}
+            ${job.output_path ? `<div class="source"><code>${esc(job.output_path)}</code></div>` : ""}
+            <details>
+                <summary>Log</summary>
+                <pre>${esc(log)}</pre>
+            </details>
+        </article>`;
+}
+
+function setSection(id, countId, jobs) {
+    document.getElementById(countId).textContent = jobs.length;
+    document.getElementById(id).innerHTML = jobs.length
+        ? jobs.map(jobHtml).join("")
+        : '<div class="empty">Nothing here.</div>';
+}
+
+function openLogJobIds() {
+    return new Set(
+        [...document.querySelectorAll("article.job details[open]")]
+            .map(details => details.closest("article.job")?.dataset.jobId)
+            .filter(Boolean)
+    );
+}
+
+function restoreOpenLogs(openIds) {
+    for (const article of document.querySelectorAll("article.job")) {
+        if (!openIds.has(article.dataset.jobId)) continue;
+
+        const details = article.querySelector("details");
+        if (details) details.open = true;
+    }
+}
+
+async function refreshJobs() {
+    try {
+        const openLogs = openLogJobIds();
+
+        const response = await fetch("/api/jobs", { cache: "no-store" });
+        const data = await response.json();
+        const jobs = data.jobs || [];
+        const active = jobs.filter(j => ["extracting", "downloading", "moving"].includes(j.status));
+        const queued = jobs.filter(j => j.status === "queued").sort((a,b) => (a.queue_position || 9999) - (b.queue_position || 9999));
+        const recent = jobs.filter(j => ["completed", "failed"].includes(j.status));
+
+        setSection("activeJobs", "activeCount", active);
+        setSection("queuedJobs", "queuedCount", queued);
+        setSection("recentJobs", "recentCount", recent);
+        restoreOpenLogs(openLogs);
+
+        document.getElementById("summary").textContent = `${active.length} active · ${queued.length} queued · ${recent.length} recent`;
+    } catch (error) {
+        document.getElementById("summary").textContent = `Refresh failed: ${error}`;
+    }
+}
+
+async function refreshHealth() {
+    const el = document.getElementById("health");
+    try {
+        const response = await fetch("/api/health", { cache: "no-store" });
+        const data = await response.json();
+        el.textContent = data.ok ? "FFmpeg + Chromium ready" : "Service needs attention";
+        el.className = `health ${data.ok ? "good" : "bad"}`;
+        if (!data.ok && data.chromium_error) el.title = data.chromium_error;
+    } catch (error) {
+        el.textContent = "Health check failed";
+        el.className = "health bad";
+    }
+}
+
+const params = new URLSearchParams(location.search);
+const notice = document.getElementById("notice");
+if (params.has("queued")) {
+    notice.textContent = `Queued job ${params.get("queued")}.`;
+    notice.className = "notice show ok";
+}
+if (params.has("error")) {
+    notice.textContent = params.get("error");
+    notice.className = "notice show error";
+}
+
+refreshJobs();
+refreshHealth();
+setInterval(refreshJobs, 1500);
+setInterval(refreshHealth, 30000);
+</script>
+</body>
+</html>
