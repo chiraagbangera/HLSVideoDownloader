@@ -29,7 +29,7 @@
         code { overflow-wrap: anywhere; }
         a { color: var(--accent); }
         .lead { color: var(--muted); margin: 8px 0 0; max-width: 780px; }
-        .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
+        .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
         .metric, .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
         .metric { padding: 14px; min-height: 84px; }
         .metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -51,7 +51,7 @@
         .status { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px; }
         .status.completed { color: var(--ok); }
         .status.failed { color: var(--bad); }
-        .status.extracting, .status.downloading, .status.moving { color: var(--accent); }
+        .status.downloading, .status.moving { color: var(--accent); }
         .status.queued { color: var(--warn); }
         .progress { height: 9px; background: #292e36; border-radius: 999px; overflow: hidden; margin: 12px 0 7px; }
         .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .35s ease; }
@@ -84,7 +84,7 @@
         <div class="row">
             <div>
                 <h1>{{ app_name }}</h1>
-                <p class="lead">Paste a normal video webpage URL or a direct HLS <code>.m3u8</code> URL. The Pi resolves the active HLS stream in headless Chromium, downloads it locally with FFmpeg without re-encoding, then moves the completed MP4 to the NAS.</p>
+                <p class="lead">Paste a direct HLS <code>.m3u8</code> URL, or send one from the browser capture script. The Pi downloads it with FFmpeg without re-encoding, then moves the completed MP4 to the NAS.</p>
             </div>
             <div id="health" class="health">Checking service…</div>
         </div>
@@ -103,20 +103,16 @@
             <div class="label">Concurrency</div>
             <div class="value">{{ max_concurrent_downloads }} workers</div>
         </div>
-        <div class="metric">
-            <div class="label">Browser extraction</div>
-            <div class="value">Ad block {{ "on" if adblock_enabled else "off" }}{% if adblock_enabled and adblock_fallback %} + fallback{% endif %}</div>
-        </div>
     </div>
 
     <section class="card">
         <h2>Add download</h2>
         <form method="post" action="/download">
-            <input name="url" type="url" placeholder="https://example.com/watch/video or https://cdn.example.com/master.m3u8" autocomplete="off" required>
-            <input name="title" placeholder="Optional output filename/title">
+            <input id="downloadUrl" name="url" type="url" placeholder="https://cdn.example.com/master.m3u8" autocomplete="off" required>
+            <input id="downloadTitle" name="title" placeholder="Optional output filename/title">
             <button type="submit">Add to queue</button>
         </form>
-        <div class="hint">Page URLs are resolved only when a worker starts, so short-lived signed HLS links are not sitting in the queue waiting to expire. Finished and failed job records are cleared after {{ ttl_hours }} hours.</div>
+        <div class="hint">Only direct HTTP/HTTPS <code>.m3u8</code> URLs are accepted. Captured links may expire, so send or queue them promptly. Finished and failed job records are cleared after {{ ttl_hours }} hours.</div>
         <div id="notice" class="notice"></div>
     </section>
 
@@ -138,7 +134,7 @@
         <div id="recentJobs" class="jobs"></div>
     </section>
 
-    <p class="hint">Use only with streams you are authorized to save. The service is intended for a trusted LAN and accepts arbitrary HTTP/HTTPS URLs.</p>
+    <p class="hint">Use only with streams you are authorized to save. The service is intended for a trusted LAN and accepts direct HTTP/HTTPS HLS URLs.</p>
 </main>
 
 <script>
@@ -195,7 +191,6 @@ function jobHtml(job) {
                 ${job.speed ? `<span>${esc(job.speed)}</span>` : ""}
                 ${queueText ? `<span>${esc(queueText)}</span>` : ""}
                 ${job.worker_number ? `<span>Worker ${job.worker_number}</span>` : ""}
-                ${job.adblock_used === true ? `<span>Ad block used</span>` : ""}
                 ${job.direct_hls ? `<span>Direct HLS</span>` : ""}
             </div>
             ${job.message ? `<div class="message">${esc(job.message)}</div>` : ""}
@@ -238,7 +233,7 @@ async function refreshJobs() {
         const response = await fetch("/api/jobs", { cache: "no-store" });
         const data = await response.json();
         const jobs = data.jobs || [];
-        const active = jobs.filter(j => ["extracting", "downloading", "moving"].includes(j.status));
+        const active = jobs.filter(j => ["downloading", "moving"].includes(j.status));
         const queued = jobs.filter(j => j.status === "queued").sort((a,b) => (a.queue_position || 9999) - (b.queue_position || 9999));
         const recent = jobs.filter(j => ["completed", "failed"].includes(j.status));
 
@@ -258,9 +253,8 @@ async function refreshHealth() {
     try {
         const response = await fetch("/api/health", { cache: "no-store" });
         const data = await response.json();
-        el.textContent = data.ok ? "FFmpeg + Chromium ready" : "Service needs attention";
+        el.textContent = data.ok ? "FFmpeg ready · direct HLS only" : "Service needs attention";
         el.className = `health ${data.ok ? "good" : "bad"}`;
-        if (!data.ok && data.chromium_error) el.title = data.chromium_error;
     } catch (error) {
         el.textContent = "Health check failed";
         el.className = "health bad";

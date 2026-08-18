@@ -53,6 +53,7 @@ for required_file in \
     requirements.txt \
     README.md \
     LICENSE \
+    browser-capture.js \
     install.sh \
     hls-video-downloader.service \
     templates/index.html; do
@@ -128,6 +129,8 @@ install -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0644 \
     "$SOURCE_DIR/README.md" "$APP_DIR/README.md"
 install -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0644 \
     "$SOURCE_DIR/LICENSE" "$APP_DIR/LICENSE"
+install -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0644 \
+    "$SOURCE_DIR/browser-capture.js" "$APP_DIR/browser-capture.js"
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 "$APP_DIR/templates"
 cp -a "$SOURCE_DIR/templates/." "$APP_DIR/templates/"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/templates"

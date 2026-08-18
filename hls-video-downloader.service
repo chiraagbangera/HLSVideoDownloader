@@ -13,19 +13,12 @@ WorkingDirectory=/opt/hls-video-downloader
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/var/tmp/hls-video-downloader/home
 Environment=TMPDIR=/var/tmp/hls-video-downloader/tmp
-Environment=PLAYWRIGHT_BROWSERS_PATH=/var/tmp/hls-video-downloader/browsers
 Environment=DOWNLOAD_DIR=/mnt/Videos
 Environment=TEMP_DOWNLOAD_DIR=/var/tmp/hls-video-downloader/jobs
 Environment=FFMPEG_BIN=/usr/bin/ffmpeg
 Environment=FFPROBE_BIN=/usr/bin/ffprobe
 Environment=MAX_CONCURRENT_DOWNLOADS=2
 Environment=COMPLETED_JOB_TTL_HOURS=24
-Environment=EXTRACT_TIMEOUT_SECONDS=45
-Environment=PAGE_LOAD_TIMEOUT_SECONDS=45
-Environment=ADBLOCK_ENABLED=1
-Environment=ADBLOCK_FALLBACK=1
-Environment=CHROMIUM_NO_SANDBOX=0
-
 ExecStart=/opt/hls-video-downloader/.venv/bin/gunicorn --workers 1 --threads 8 --bind 0.0.0.0:99 --access-logfile - --error-logfile - app:app
 Restart=on-failure
 RestartSec=3
@@ -37,8 +30,7 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 # Avoid systemd mount-namespace restrictions here. Some Raspberry Pi OS
 # configurations cannot create the required namespace and fail with
-# status=226/NAMESPACE before Gunicorn starts. Chromium still uses its own
-# sandbox unless CHROMIUM_NO_SANDBOX is explicitly enabled above.
+# status=226/NAMESPACE before Gunicorn starts.
 
 [Install]
 WantedBy=multi-user.target

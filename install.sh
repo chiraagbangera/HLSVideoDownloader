@@ -51,6 +51,7 @@ cp "$SOURCE_DIR/requirements.txt" "$APP_DIR/requirements.txt"
 cp "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
 cp "$SOURCE_DIR/README.md" "$APP_DIR/README.md"
 cp "$SOURCE_DIR/LICENSE" "$APP_DIR/LICENSE"
+cp "$SOURCE_DIR/browser-capture.js" "$APP_DIR/browser-capture.js"
 cp "$SOURCE_DIR/hls-video-downloader.service" "/etc/systemd/system/${SERVICE_NAME}.service"
 
 # If a non-pi service user was requested, update the unit before installation.
@@ -68,17 +69,7 @@ python3 -m venv "$APP_DIR/.venv"
 mkdir -p "$STATE_DIR/home"
 mkdir -p "$STATE_DIR/tmp"
 mkdir -p "$STATE_DIR/jobs"
-mkdir -p "$STATE_DIR/browsers"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$STATE_DIR"
-
-# Install Playwright's Chromium dependencies as root, then install the
-# browser itself into the shared service-owned browser directory.
-PLAYWRIGHT_BROWSERS_PATH="$STATE_DIR/browsers" \
-    "$APP_DIR/.venv/bin/playwright" install-deps chromium
-
-sudo -u "$SERVICE_USER" env \
-    PLAYWRIGHT_BROWSERS_PATH="$STATE_DIR/browsers" \
-    "$APP_DIR/.venv/bin/playwright" install chromium
 
 if [[ ! -d /mnt/Videos ]]; then
     echo

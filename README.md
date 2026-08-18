@@ -1,15 +1,13 @@
 # HLS Video Downloader
 
-A generic Raspberry Pi web service for downloading HLS video streams you are authorized to save.
+A Raspberry Pi web service for downloading direct HLS (`.m3u8`) streams you
+are authorized to save. It does not open webpages, parse HTML, run Chromium, or
+attempt to discover media URLs.
 
-Paste either:
-
-- a normal HTTP/HTTPS video webpage URL, or
-- a direct `.m3u8` HLS URL.
-
-For webpage URLs, the Pi opens the page in one shared headless Chromium process, creates an isolated browser context for the job, blocks common ad/tracking domains, attempts to start playback, observes the actual network traffic, and captures the active non-ad HLS manifest. If ad blocking prevents the player from initializing, it can automatically retry extraction once without blocking ads.
-
-The resolved stream is then downloaded with FFmpeg using stream copy (`-c copy`) to local temporary storage. Only after FFmpeg completes successfully is the MP4 moved to the NAS destination.
+Submit a direct HLS URL through the web interface or send it from
+[`browser-capture.js`](browser-capture.js). The supplied title becomes the
+default MP4 filename. FFmpeg downloads the stream with stream copy (`-c copy`)
+to local temporary storage, then moves the completed MP4 to the NAS.
 
 ## Educational use and legal disclaimer
 
@@ -27,88 +25,120 @@ penalties, or other consequences.
 
 ## Default layout
 
-- Web UI: `http://192.168.1.5:99`
+- Web UI and API: `http://192.168.1.5:99`
 - NAS destination: `/mnt/Videos`
 - Temporary job storage: `/var/tmp/hls-video-downloader/jobs`
-- Concurrent jobs: `2`
-- Completed/failed job retention in UI: `24 hours`
-- Browser ad blocking: enabled
-- Ad-block extraction fallback: enabled
-
-## Architecture
-
-```text
-Browser / phone / PC
-        |
-        | paste normal page URL
-        v
-Raspberry Pi :99
-        |
-        v
-      Queue
-        |
-        +--> Worker 1 --+
-        |               |
-        +--> Worker 2 --+--> shared headless Chromium
-        |                    (separate context/page per extraction)
-        |                          |
-        |                          +--> detect active .m3u8
-        |                                  |
-        +----------------------------------+
-                                           v
-                                      FFmpeg -c copy
-                                           |
-                              local temporary MP4
-                                           |
-                                     successful only
-                                           v
-                                      /mnt/Videos
-```
-
-The page URL is queued, not the temporary signed HLS URL. This means a job can wait in the queue without its stream token expiring before the worker starts.
+- Concurrent downloads: `2`
+- Completed/failed job retention: `24 hours`
+- Accepted input: direct HTTP/HTTPS `.m3u8` URLs only
 
 ## Install on Raspberry Pi
-
-Copy/extract this folder to the Pi, then:
 
 ```bash
 cd hls-video-downloader
 sudo ./install.sh
 ```
 
-The installer installs:
+The installer installs Python venv support, FFmpeg/FFprobe, the Python
+dependencies, and the systemd service. Chromium and Playwright are not used.
 
-- Python venv support
-- FFmpeg / FFprobe
-- Python dependencies
-- Playwright Chromium plus its Linux dependencies
-- systemd service
-
-It installs the application to:
-
-```text
-/opt/hls-video-downloader
-```
-
-and creates temporary directories under:
-
-```text
-/var/tmp/hls-video-downloader
-```
-
-### NAS permission check
-
-The service runs as user `pi` by default. Verify that user can write to the NAS:
+The service runs as user `pi` by default. Verify NAS access with:
 
 ```bash
 sudo -u pi touch /mnt/Videos/.hls-video-test
 sudo rm /mnt/Videos/.hls-video-test
 ```
 
-If your Pi account has a different username, install with:
+For another service account:
 
 ```bash
 sudo SERVICE_USER=myusername ./install.sh
+```
+
+## Deploy updates from VS Code
+
+Run:
+
+```text
+Terminal -> Run Build Task -> Deploy to Raspberry Pi
+```
+
+The task prompts for the SSH destination, copies updated files, stops the
+existing service, applies dependency and systemd changes, restarts the service,
+and performs a health check. If the service is not installed, the same task
+runs the initial installer.
+
+From a terminal:
+
+```bash
+PI_HOST=pi@192.168.1.5 ./deploy.sh
+```
+
+## Submit from the browser
+
+Open or refresh the video page and wait for it to finish selecting its media
+server. Paste the contents of [`browser-capture.js`](browser-capture.js) into
+the browser developer console. The script:
+
+1. Reads completed resource requests from the browser performance timeline.
+2. Selects the latest matching `/etv/content/` `.m3u8` URL.
+3. Reads `data-content-title` from `#UIVideoPlayer` for the filename.
+4. Sends the URL, title, referer, and current browser user-agent to
+   `http://192.168.1.5:99/download`.
+
+The server supports CORS preflight and private-network request headers on the
+submission endpoint. If the browser asks whether the website may access devices
+on the local network, allow it. Change `downloaderEndpoint` at the top of the
+script if the Pi address changes. Do not use `127.0.0.1` unless the downloader
+is running on the same computer as the browser.
+
+The script logs the queued job response in the developer console. Open
+`http://192.168.1.5:99` to monitor progress.
+
+## Web interface
+
+The form accepts a direct URL such as:
+
+```text
+https://cdn.example.com/path/master.m3u8?token=...
+```
+
+Normal webpage URLs are rejected. The optional title becomes the filename;
+when omitted, the filename is `video.mp4`. Duplicate filenames receive a
+numeric suffix rather than overwriting an existing video.
+
+Job states are:
+
+```text
+queued -> downloading -> moving -> completed
+                                \-> failed
+```
+
+## API
+
+Both `/download` and `/api/download` accept the browser script's JSON payload:
+
+```http
+POST /download
+Content-Type: application/json
+
+{
+  "url": "https://cdn.example.com/path/master.m3u8?token=...",
+  "title": "Video title",
+  "referer": "https://example.com/",
+  "userAgent": "Mozilla/5.0 ..."
+}
+```
+
+A successful request returns HTTP `202` with the queued job. A URL that is not
+a direct `.m3u8` returns HTTP `400`.
+
+Other endpoints:
+
+```text
+GET /api/jobs
+GET /api/jobs/<job-id>
+GET /api/health
 ```
 
 ## Service commands
@@ -120,204 +150,21 @@ sudo systemctl stop hls-video-downloader
 journalctl -u hls-video-downloader -f
 ```
 
-## Deploy updates from VS Code
+## Download behavior
 
-Run the default build task in VS Code:
+FFmpeg receives the captured browser user-agent, `Referer`, and `Origin` headers
+because signed HLS links may require the same request context as the browser.
+It is invoked with `-c copy`, so audio and video are remuxed rather than
+transcoded. The completed file is moved to `/mnt/Videos` only after FFmpeg exits
+successfully.
 
-```text
-Terminal -> Run Build Task -> Deploy to Raspberry Pi
-```
-
-The task prompts for the Raspberry Pi SSH destination and stages the current
-project with `rsync`. If the application is not installed yet, it runs the
-initial installer. Otherwise, it stops the service, applies changed
-application, dependency, and systemd unit files, and restarts the service. If
-an update step fails after the stop, the updater attempts to start the service
-again.
-
-Deploying over the former `lan-hls-video-downloader` installation performs a
-one-time migration. The old service is stopped, the renamed service is
-installed, and the old `/opt` and `/var/tmp` application directories are
-removed only after `hls-video-downloader` starts successfully. Completed videos
-under `/mnt/Videos` are not touched.
-
-The same deployment can be run from a terminal:
-
-```bash
-PI_HOST=pi@raspberrypi.local ./deploy.sh
-```
-
-Use `REMOTE_DIR` to override the temporary remote staging directory if needed:
-
-```bash
-PI_HOST=pi@raspberrypi.local \
-REMOTE_DIR=/tmp/hls-video-deploy \
-./deploy.sh
-```
-
-Health endpoint:
-
-```text
-http://192.168.1.5:99/api/health
-```
-
-## Web interface
-
-Open:
-
-```text
-http://192.168.1.5:99
-```
-
-Paste a page such as:
-
-```text
-https://example.com/watch/123
-```
-
-or a direct HLS manifest:
-
-```text
-https://cdn.example.com/path/master.m3u8?token=...
-```
-
-The optional title field overrides the filename. If left empty, the downloader uses the page's Open Graph title when available, otherwise the document title.
-
-Job states are:
-
-```text
-queued
-  -> extracting
-  -> downloading
-  -> moving
-  -> completed
-
-or failed
-```
-
-The UI refreshes automatically and shows queue position, worker, FFmpeg progress, media time, output size, speed, messages, and logs.
-
-## Concurrency
-
-Default:
-
-```ini
-Environment=MAX_CONCURRENT_DOWNLOADS=2
-```
-
-Additional jobs remain queued. To change it:
-
-```bash
-sudo nano /etc/systemd/system/hls-video-downloader.service
-sudo systemctl daemon-reload
-sudo systemctl restart hls-video-downloader
-```
-
-Two workers may extract concurrently, but they share a single Chromium browser process. Each extraction uses its own isolated browser context/page. Once a worker has resolved its HLS manifest, that browser context is closed and FFmpeg handles the actual download.
-
-## Ad blocking
-
-The downloader uses Chromium request interception rather than a browser extension. This avoids maintaining an extension and works in headless mode.
-
-Default:
-
-```ini
-Environment=ADBLOCK_ENABLED=1
-Environment=ADBLOCK_FALLBACK=1
-```
-
-Common advertising and tracking domains are blocked during extraction. Images and fonts are also skipped because they are not needed to discover the HLS stream.
-
-If no HLS stream is found with ad blocking, `ADBLOCK_FALLBACK=1` causes one clean retry without the block list. Set it to `0` if you never want that fallback.
-
-Add custom blocked domains with a comma-separated environment variable:
-
-```ini
-Environment=ADBLOCK_DOMAINS=ads.example.com,tracker.example.net
-```
-
-## Chromium
-
-The installer downloads Playwright's Chromium build into:
-
-```text
-/var/tmp/hls-video-downloader/browsers
-```
-
-and the systemd unit sets `PLAYWRIGHT_BROWSERS_PATH` to that directory. This avoids depending on whatever Chromium version happens to be installed by the Raspberry Pi OS package manager.
-
-A custom browser can still be forced if needed:
-
-```ini
-Environment=CHROMIUM_BIN=/usr/bin/chromium
-```
-
-The application explicitly requests Chromium sandboxing. If your Raspberry Pi image prevents Chromium from launching under systemd because of sandbox configuration, first check the logs. As a last resort you can set:
-
-```ini
-Environment=CHROMIUM_NO_SANDBOX=1
-```
-
-then reload/restart the service. Disabling the browser sandbox reduces isolation and is not the preferred configuration.
-
-## Highest quality / no re-encoding
-
-FFmpeg is invoked with:
-
-```text
--c copy
-```
-
-so the video/audio are remuxed rather than transcoded. There is no generation loss. When a master HLS manifest exposes multiple video/audio streams, FFmpeg's normal automatic stream selection is left enabled, which favors the highest-resolution video and the audio stream with the most channels.
-
-The completed file is written first to local Pi storage and then moved to `/mnt/Videos`. If the NAS is a different filesystem, the final `move` is implemented as a copy-to-NAS followed by removal of the local temporary file.
-
-## API
-
-Queue a job:
-
-```http
-POST /api/download
-Content-Type: application/json
-
-{
-  "url": "https://example.com/watch/123",
-  "title": "Optional title"
-}
-```
-
-List jobs:
-
-```text
-GET /api/jobs
-```
-
-Single job:
-
-```text
-GET /api/jobs/<job-id>
-```
-
-Health:
-
-```text
-GET /api/health
-```
-
-Short-lived stream URLs, cookies, and authorization headers captured by Chromium are intentionally not exposed by the public API/UI.
-
-## Notes
-
-- Job history is in memory and is cleared by a service restart.
-- Completed/failed jobs are automatically removed from memory after 24 hours by default.
-- This service intentionally accepts arbitrary HTTP/HTTPS URLs, so expose it only to a trusted LAN.
-- Not every website uses HLS. DASH-only (`.mpd`) or DRM-protected playback is outside this downloader's scope.
-- Use only with media you are authorized to download.
+Job history is held in memory and is cleared by a service restart. Finished and
+failed records are removed after 24 hours by default. Signed URLs may expire,
+so submit them promptly after capture.
 
 ## License
 
 This project is available under the [MIT License](LICENSE). You may use, copy,
 modify, and distribute it, provided that the copyright and license notice are
-retained in copies or substantial portions of the software. Retaining that
-notice provides the required attribution. The software is supplied **as is**,
-without warranty; see the license for the complete terms.
+retained in copies or substantial portions of the software. The software is
+supplied **as is**, without warranty; see the license for the complete terms.
